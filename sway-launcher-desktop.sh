@@ -13,6 +13,11 @@ IFS=$'\n\t'
 DEL=$'\34'
 
 TERMINAL_COMMAND="${TERMINAL_COMMAND:="$TERM -e"}"
+if [[ "$TERMINAL_COMMAND" != *"--title"* ]]; then
+  if [[ "$TERMINAL_COMMAND" == "alacritty"* ]] || [[ "$TERMINAL_COMMAND" == "gnome-terminal"* ]]; then
+    TERMINAL_COMMAND=${TERMINAL_COMMAND/ / --title \"\$APPLICATION_NAME\" }
+  fi
+fi
 GLYPH_COMMAND="${GLYPH_COMMAND-  }"
 GLYPH_DESKTOP="${GLYPH_DESKTOP-  }"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sway-launcher-desktop"
@@ -171,9 +176,10 @@ function generate-command() {
   # 2. We see the specified pattern: start search
   # 3. We see an Exec= line during search: remove field codes and set variable
   # 3. We see a Path= line during search: set variable
-  # 4. Finally, build command line
+  # 4. The first time we see a Name= line, take its value as the application name (will always match againts the first entry in the file, which should be the main [Desktop Entry])
+  # 5. Finally, build command line
   awk -v pattern="${PATTERN}" -v terminal_cmd="${TERMINAL_COMMAND}" -F= '
-    BEGIN{a=0;exec=0;path=0}
+    BEGIN{a=0;exec=0;path=0;name=""}
        /^\[Desktop/{
         if(a){ a=0 }
        }
@@ -192,10 +198,19 @@ function generate-command() {
       /^Path=/{
         if(a && !path){ path=$2 }
        }
+      /^Name=/{
+        if(name == ""){ name=$2 }
+       }
     END{
-      if(path){ printf "cd " path " && " }
-      if (terminal){ printf terminal_cmd " " }
-      print exec
+      if (path){ printf "cd " path " && " }
+      printf "("
+      if (terminal){
+	printf "APPLICATION_NAME='"'"'"
+	gsub(/'"'"'/, "'"'"'\"'"'"'\"'"'"'", name)
+	printf name "'"'"'; "
+        printf terminal_cmd " "
+      }
+      print exec ")"
     }' "$1"
 }
 
